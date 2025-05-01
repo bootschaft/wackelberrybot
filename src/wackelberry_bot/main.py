@@ -1,6 +1,7 @@
 
 import os
 import json
+import gps
 from telegram import Update, User
 from telegram.ext import (
     ApplicationBuilder, CommandHandler, ContextTypes
@@ -14,10 +15,21 @@ if not TOKEN:
     raise RuntimeError("Please set the TELEGRAM_BOT_TOKEN environment variable.")
 
 
-# Mock GPS function
 def get_position():
-    from random import uniform
-    return (37.7749 + uniform(-0.001, 0.001), -122.4194 + uniform(-0.001, 0.001))
+    session = gps.gps(mode=gps.WATCH_ENABLE | gps.WATCH_NEWSTYLE)
+
+    print("Waiting for GPS data...")
+    try:
+        for report in session:
+            if report['class'] == 'TPV':
+                latitude = getattr(report, 'lat', None)
+                longitude = getattr(report, 'lon', None)
+                if latitude is not None and longitude is not None:
+                    return latitude, longitude
+    except Exception as e:
+        print(f"Error: {e}")
+        
+    return 52.245126076131164, 8.905499525447263
 
 
 def load_users() -> dict:
