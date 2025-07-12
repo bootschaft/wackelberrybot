@@ -1,7 +1,6 @@
 
 import os
 import json
-import gps
 from telegram import Update, User
 from telegram.ext import (
     ApplicationBuilder, CommandHandler, ContextTypes
@@ -14,22 +13,37 @@ TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 if not TOKEN:
     raise RuntimeError("Please set the TELEGRAM_BOT_TOKEN environment variable.")
 
+TELEGRAF_OUTPUT = "/home/marc/boat-pi/metrics.json"
+
+
+def read_telegraf_output() -> dict:
+    try:
+        with open(TELEGRAF_OUTPUT, "r") as file:
+            data = json.load(file)
+    except FileNotFoundError:
+        print(f"File {TELEGRAF_OUTPUT} not found.")
+        return {}
+    except json.JSONDecodeError:
+        print(f"Error decoding JSON from {TELEGRAF_OUTPUT}.")
+        return {}
+    
+    metrics = {}
+    metrics["timestamp"] = data["metrics"][0]["timestamp"]
+    gps_data = [m for m in data["metrics"] if m["name"] == "gps"]
+    metrics["gps"] = gps_data[0]["fields"] if gps_data else None
+    victron = [m for m in data["metrics"] if m["name"] == "victron"]
+    metrics["victron"] = victron[0]["fields"] if victron else None
+    return metrics
+
 
 def get_position():
-    session = gps.gps(mode=gps.WATCH_ENABLE | gps.WATCH_NEWSTYLE)
+    metrics = read_telegraf_output()
+    if not metrics:
+        print("No metrics data available.")
+        return 52.245126076131164, 8.905499525447263
+    
+    return metrics["lat"], metrics["lon"]
 
-    print("Waiting for GPS data...")
-    try:
-        for report in session:
-            if report['class'] == 'TPV':
-                latitude = getattr(report, 'lat', None)
-                longitude = getattr(report, 'lon', None)
-                if latitude is not None and longitude is not None:
-                    return latitude, longitude
-    except Exception as e:
-        print(f"Error: {e}")
-        
-    return 52.245126076131164, 8.905499525447263
 
 
 def load_users() -> dict:
