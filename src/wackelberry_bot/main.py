@@ -42,7 +42,7 @@ def get_position():
         print("No metrics data available.")
         return 52.245126076131164, 8.905499525447263
     
-    return metrics["lat"], metrics["lon"]
+    return metrics["gps"]["lat"], metrics["gps"]["lon"]
 
 
 
