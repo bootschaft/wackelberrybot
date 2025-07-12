@@ -6,6 +6,14 @@ from telegram.ext import (
     ApplicationBuilder, CommandHandler, ContextTypes
 )
 import asyncio
+import logging
+
+# Configure logging
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
 
 UPDATE_INTERVAL = 15  # seconds
 # Load the bot token from environment variable
@@ -21,10 +29,10 @@ def read_telegraf_output() -> dict:
         with open(TELEGRAF_OUTPUT, "r") as file:
             data = json.load(file)
     except FileNotFoundError:
-        print(f"File {TELEGRAF_OUTPUT} not found.")
+        logger.error(f"File {TELEGRAF_OUTPUT} not found.")
         return {}
     except json.JSONDecodeError:
-        print(f"Error decoding JSON from {TELEGRAF_OUTPUT}.")
+        logger.error(f"Error decoding JSON from {TELEGRAF_OUTPUT}.")
         return {}
     
     metrics = {}
@@ -39,7 +47,7 @@ def read_telegraf_output() -> dict:
 def get_position():
     metrics = read_telegraf_output()
     if not metrics:
-        print("No metrics data available.")
+        logger.error("No metrics data available.")
         return 52.245126076131164, 8.905499525447263
     
     return metrics["gps"]["lat"], metrics["gps"]["lon"]
@@ -152,16 +160,20 @@ async def send_message_to_admins(context: ContextTypes.DEFAULT_TYPE, message: st
 # Command: /register
 async def register(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    print("Registration requested by:", user)
+    logger.info("Registration requested by:", user)
 
     if is_approved(user):
+        logger.info(f"User {user.id} is already registered.")
         await update.message.reply_text("✅ You're already registered.")
     elif is_pending(user):
+        logger.info(f"User {user.id} has a pending registration.")
         await update.message.reply_text("🕒 Your registration is pending.")
     elif is_blocked(user):
+        logger.warning(f"User {user.id} is blocked.")
         await update.message.reply_text("⛔ You're blocked from using this bot.")
     else:
         add_pending_user(user)
+        logger.info(f"User {user.id} added to pending registrations.")
         await update.message.reply_text("📨 Registration request sent. Please wait for approval.")
         
         await send_message_to_admins(context, f"👤 New registration request from {user.full_name} (ID: {user.id})")
@@ -170,7 +182,7 @@ async def register(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # Command: /approve <user_id>
 async def approve(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    print("Approval requested by:", user)
+    logger.info("Approval requested by:", user)
     
     if not is_admin(update.effective_user):
         await update.message.reply_text("⛔ You're not allowed to approve users.")
@@ -184,6 +196,7 @@ async def approve(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id = int(context.args[0])
         user = get_user(user_id=str(user_id))
     except ValueError:
+        logger.error("Invalid user ID provided.")
         await update.message.reply_text("❌ Invalid user ID.")
         return
 
@@ -206,27 +219,31 @@ async def approve(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # Command: /live (send live location)
 async def send_live_location(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    print("Live location requested by:", user)
+    logger.info("Live location requested by:", user)
 
     if not is_approved(user):
         await update.message.reply_text("❌ You're not approved to access the location. Use /register.")
         return
 
     latitude, longitude = get_position()
+    logger.info(f"Sending live location: {latitude}, {longitude}")
+    
+    update_period = 15*60
 
     msg = await update.message.reply_location(
         latitude=latitude,
         longitude=longitude,
-        live_period=3600
+        live_period=update_period
     )
 
     message_id = msg.message_id
     chat_id = update.effective_chat.id
 
-    for _ in range(int(3600 / UPDATE_INTERVAL)):
+    for _ in range(int(update_period / UPDATE_INTERVAL)):
         await asyncio.sleep(UPDATE_INTERVAL)
 
         latitude, longitude = get_position()
+        logger.info(f"Updating location to: {latitude}, {longitude}")
         try:
             await context.bot.edit_message_live_location(
                 chat_id=chat_id,
@@ -235,8 +252,12 @@ async def send_live_location(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 longitude=longitude
             )
         except Exception as e:
-            print(f"Error updating location: {e}")
-            # TODO: Cancel sharing
+            logger.error(f"Error updating location: {e}")
+            # stop location sharing
+            await context.bot.stop_message_live_location(
+                chat_id=chat_id,
+                message_id=message_id
+            )
             break
 
 
