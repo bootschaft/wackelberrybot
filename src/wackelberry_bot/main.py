@@ -248,7 +248,12 @@ async def send_live_location(update: Update, context: ContextTypes.DEFAULT_TYPE)
     for _ in range(int(update_period / UPDATE_INTERVAL)):
         await asyncio.sleep(UPDATE_INTERVAL)
 
-        latitude, longitude, heading = get_position()
+        new_latitude, new_longitude, new_heading = get_position()
+        
+        if new_latitude == latitude and new_longitude == longitude and new_heading == heading:
+            logger.info("Position has not changed, skipping update.")
+            continue
+        latitude, longitude, heading = new_latitude, new_longitude, new_heading
         logger.info(f"Updating location to: {latitude}, {longitude}, heading {heading}")
         try:
             await context.bot.edit_message_live_location(
