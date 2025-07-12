@@ -160,7 +160,7 @@ async def send_message_to_admins(context: ContextTypes.DEFAULT_TYPE, message: st
 # Command: /register
 async def register(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    logger.info("Registration requested by:", user)
+    logger.info("Registration requested by:", str(user))
 
     if is_approved(user):
         logger.info(f"User {user.id} is already registered.")
@@ -182,7 +182,7 @@ async def register(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # Command: /approve <user_id>
 async def approve(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    logger.info("Approval requested by:", user)
+    logger.info("Approval requested by:", str(user))
     
     if not is_admin(update.effective_user):
         await update.message.reply_text("⛔ You're not allowed to approve users.")
@@ -219,7 +219,7 @@ async def approve(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # Command: /live (send live location)
 async def send_live_location(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    logger.info("Live location requested by:", user)
+    logger.info("Live location requested by:", str(user))
 
     if not is_approved(user):
         await update.message.reply_text("❌ You're not approved to access the location. Use /register.")
