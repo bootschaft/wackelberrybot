@@ -12,6 +12,7 @@ import random
 # Configure logging
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.WARNING,  # Set to DEBUG for more detailed logs
 )
 logger = logging.getLogger(__name__)
 
@@ -265,6 +266,8 @@ async def send_live_location(update: Update, context: ContextTypes.DEFAULT_TYPE)
             )
         except Exception as e:
             logger.error(f"Error updating location: {e}")
+            if str(e).startswith("Message is not modified"):
+                continue
             # stop location sharing
             await context.bot.stop_message_live_location(
                 chat_id=chat_id,
