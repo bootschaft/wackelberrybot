@@ -7,11 +7,11 @@ from telegram.ext import (
 )
 import asyncio
 import logging
+import random
 
 # Configure logging
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
@@ -48,9 +48,14 @@ def get_position():
     metrics = read_telegraf_output()
     if not metrics:
         logger.error("No metrics data available.")
-        return 52.245126076131164, 8.905499525447263
+        return 52.245126076131164, 8.905499525447263, 0
     
-    return metrics["gps"]["lat"], metrics["gps"]["lon"]
+    lat, lon, heading = metrics["gps"]["lat"], metrics["gps"]["lon"], int(metrics["gps"]["track"])
+    noise_lat = random.uniform(-0.000001, 0.000001)
+    noise_lon = random.uniform(-0.000001, 0.000001)
+    lat += noise_lat
+    lon += noise_lon
+    return lat, lon, heading
 
 
 
@@ -160,7 +165,7 @@ async def send_message_to_admins(context: ContextTypes.DEFAULT_TYPE, message: st
 # Command: /register
 async def register(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    logger.info("Registration requested by:", str(user))
+    logger.info("Registration requested by:" + str(user))
 
     if is_approved(user):
         logger.info(f"User {user.id} is already registered.")
@@ -182,7 +187,7 @@ async def register(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # Command: /approve <user_id>
 async def approve(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    logger.info("Approval requested by:", str(user))
+    logger.info("Approval requested by:" + str(user))
     
     if not is_admin(update.effective_user):
         await update.message.reply_text("⛔ You're not allowed to approve users.")
@@ -219,20 +224,21 @@ async def approve(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # Command: /live (send live location)
 async def send_live_location(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    logger.info("Live location requested by:", str(user))
+    logger.info("Live location requested by:" + str(user))
 
     if not is_approved(user):
         await update.message.reply_text("❌ You're not approved to access the location. Use /register.")
         return
 
-    latitude, longitude = get_position()
-    logger.info(f"Sending live location: {latitude}, {longitude}")
+    latitude, longitude, heading = get_position()
+    logger.info(f"Sending live location: {latitude}, {longitude}, heading {heading}")
     
     update_period = 15*60
 
     msg = await update.message.reply_location(
         latitude=latitude,
         longitude=longitude,
+        heading=heading,
         live_period=update_period
     )
 
@@ -242,13 +248,14 @@ async def send_live_location(update: Update, context: ContextTypes.DEFAULT_TYPE)
     for _ in range(int(update_period / UPDATE_INTERVAL)):
         await asyncio.sleep(UPDATE_INTERVAL)
 
-        latitude, longitude = get_position()
-        logger.info(f"Updating location to: {latitude}, {longitude}")
+        latitude, longitude, heading = get_position()
+        logger.info(f"Updating location to: {latitude}, {longitude}, heading {heading}")
         try:
             await context.bot.edit_message_live_location(
                 chat_id=chat_id,
                 message_id=message_id,
                 latitude=latitude,
+                heading=heading,
                 longitude=longitude
             )
         except Exception as e:
